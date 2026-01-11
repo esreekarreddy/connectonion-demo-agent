@@ -1,125 +1,76 @@
 #!/usr/bin/env python3
-"""
-Simple Research Agent - Built with ConnectOnion
-================================================
+"""ConnectOnion Demo Agent. Author: Sreekar Reddy"""
 
-A straightforward agent that researches topics and provides summaries.
-This demonstrates ConnectOnion's core concepts cleanly.
-
-Author: Sreekar Reddy
-"""
-
-from connectonion import Agent, Memory, llm_do
+from connectonion import Agent, Memory, llm_do, after_each_tool, on_complete
 
 
-# --- Tools (just functions!) ---
+def log_tool_execution(agent):
+    trace = agent.current_session["trace"][-1]
+    if trace["type"] == "tool_execution":
+        tool_name = trace["tool_name"]
+        timing = trace["timing"]
+        status = trace.get("status", "success")
+        icon = "+" if status == "success" else "x"
+        print(f"  [{icon}] {tool_name}: {timing:.0f}ms")
 
 
-def search_topic(query: str) -> str:
-    """
-    Search for information on a topic.
+def log_completion(agent):
+    trace = agent.current_session["trace"]
+    tool_count = sum(1 for t in trace if t["type"] == "tool_execution")
+    llm_count = sum(1 for t in trace if t["type"] == "llm_call")
+    print(f"  [=] Done: {tool_count} tools, {llm_count} LLM calls")
 
-    Args:
-        query: What to search for
 
-    Returns:
-        Search results summary
-    """
-    # In production, this would call a real search API
-    # For demo, we use llm_do to simulate intelligent search
+metrics_plugin = [after_each_tool(log_tool_execution), on_complete(log_completion)]
+
+
+def topic_overview(query: str) -> str:
+    """Generate an LLM-based overview of a topic (not web search). Returns key points."""
     result = llm_do(
-        f"Provide a brief, factual summary about: {query}. "
-        f"Include 3-4 key points with recent developments.",
+        f"Provide a concise overview about: {query}. Include 3-4 key points.",
         model="co/gpt-4o-mini",
     )
     return result
 
 
 def summarize(text: str, style: str = "brief") -> str:
-    """
-    Summarize text in a specific style.
-
-    Args:
-        text: Content to summarize
-        style: 'brief', 'detailed', or 'bullets'
-
-    Returns:
-        Summarized content
-    """
+    """Summarize text. Style: 'brief' (2-3 sentences), 'detailed', or 'bullets' (5 points)."""
     style_prompts = {
         "brief": "Summarize in 2-3 sentences",
         "detailed": "Provide a comprehensive summary with context",
         "bullets": "Summarize as 5 bullet points",
     }
-
     prompt = style_prompts.get(style, style_prompts["brief"])
-
     return llm_do(f"{prompt}:\n\n{text}", model="co/gpt-4o-mini")
 
 
-def save_note(topic: str, content: str) -> str:
-    """
-    Save research notes for later.
-
-    Args:
-        topic: Topic name (used as key)
-        content: Notes to save
-
-    Returns:
-        Confirmation message
-    """
-    memory = Memory()
-    memory.write_memory(topic.lower().replace(" ", "-"), content)
-    return f"Saved notes on '{topic}'"
-
-
-def get_notes(topic: str) -> str:
-    """
-    Retrieve saved notes on a topic.
-
-    Args:
-        topic: Topic to look up
-
-    Returns:
-        Saved notes or 'not found'
-    """
-    memory = Memory()
-    return memory.read_memory(topic.lower().replace(" ", "-"))
-
-
-# --- Create the Agent ---
+memory = Memory()
 
 agent = Agent(
-    name="research-assistant",
-    system_prompt="""You are a helpful research assistant. 
-
-Your job is to:
-1. Search for information when asked about a topic
-2. Summarize findings clearly
-3. Save important notes for later reference
-
-Be concise and factual. Always search before answering questions about current topics.""",
-    tools=[search_topic, summarize, save_note, get_notes],
-    model="co/gpt-4o-mini",  # FREE via ConnectOnion
-    max_iterations=5,  # Keep it simple
+    name="demo-agent",
+    system_prompt="prompt.md",
+    tools=[topic_overview, summarize, memory],
+    model="co/gpt-4o-mini",
+    max_iterations=5,
+    plugins=[metrics_plugin],  # type: ignore[arg-type]
 )
 
 
-# --- Main ---
-
 if __name__ == "__main__":
-    print("""
-╔═══════════════════════════════════════════════════╗
-║  🧅 Simple Research Agent                         ║
-║  Built with ConnectOnion by Sreekar Reddy         ║
-╚═══════════════════════════════════════════════════╝
-""")
+    print(
+        """
++===================================================+
+|  ConnectOnion Demo Agent                          |
+|  Built by Sreekar Reddy                           |
++===================================================+
+"""
+    )
 
     print("Examples:")
-    print("  • 'What are AI agents?'")
-    print("  • 'Summarize the latest in machine learning'")
-    print("  • 'Save a note about Python'")
-    print("  • Type 'quit' to exit\n")
+    print("  - 'Tell me about AI agents'")
+    print("  - 'Summarize: <paste text here>'")
+    print("  - 'Save a note about Python'")
+    print("  - Type 'quit' to exit\n")
 
     while True:
         try:
